@@ -37,6 +37,9 @@
 #include <zmk/split/bluetooth/peripheral.h>
 #endif
 
+#include <zmk/keymap.h>
+#include <zmk/battery.h>
+
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 #define STRIP_LABEL DT_LABEL(DT_CHOSEN(zmk_underglow))
@@ -57,6 +60,7 @@ enum rgb_underglow_effect {
     UNDERGLOW_EFFECT_KINESIS,
     UNDERGLOW_EFFECT_BATTERY,
     UNDERGLOW_EFFECT_TEST,
+    UNDERGLOW_EFFECT_STATUS,
     UNDERGLOW_EFFECT_NUMBER // Used to track number of underglow effects
 };
 
@@ -495,6 +499,37 @@ static void zmk_rgb_underglow_effect_battery() {
     }
 }
 
+static void zmk_rgb_underglow_effect_status() {
+    struct zmk_led_hsb hsb = state.color;
+    hsb.b = 0;
+
+    // Turn off all LEDs
+    for (int i = 0; i < STRIP_NUM_PIXELS; i++) {
+        pixels[i] = hsb_to_rgb(hsb_scale_zero_max(hsb));
+    }
+
+    // and turn on specific ones.
+
+    // ------- Turn on the layer status leds -------
+    struct zmk_led_hsb layer_hsb = state.color;
+    #if CONFIG_ZMK_SPLIT_ROLE_CENTRAL
+        layer_hsb.h = zmk_keymap_highest_layer_active() * 20;
+    #endif
+
+    #if IS_ENABLED(CONFIG_ZMK_RGB_UNDERGLOW_STATUS_LAYER)
+        pixels[CONFIG_ZMK_RGB_UNDERGLOW_STATUS_LAYER_N] = hsb_to_rgb(hsb_scale_min_max(layer_hsb));
+    #endif
+
+    // ------- Turn on the battery status led -------
+    struct zmk_led_hsb battery_hsb = state.color;
+    battery_hsb.h = zmk_battery_state_of_charge();
+
+    #if IS_ENABLED(CONFIG_ZMK_RGB_UNDERGLOW_STATUS_BATTERY)
+        pixels[CONFIG_ZMK_RGB_UNDERGLOW_STATUS_BATTERY_N] = hsb_to_rgb(hsb_scale_min_max(battery_hsb));
+        LOG_DBG("---------> Battery Level: %d", battery_hsb.h);
+    #endif
+}
+
 static void zmk_rgb_underglow_tick(struct k_work *work) {
     switch (state.current_effect) {
     case UNDERGLOW_EFFECT_SOLID:
@@ -517,6 +552,8 @@ static void zmk_rgb_underglow_tick(struct k_work *work) {
         break;
     case UNDERGLOW_EFFECT_TEST:
         zmk_rgb_underglow_effect_test();
+    case UNDERGLOW_EFFECT_STATUS:
+        zmk_rgb_underglow_effect_status();
         break;
     }
 
@@ -863,5 +900,25 @@ ZMK_SUBSCRIPTION(rgb_underglow, zmk_usb_conn_state_changed);
 #if ZMK_BLE_IS_CENTRAL
 ZMK_SUBSCRIPTION(rgb_underglow, zmk_split_peripheral_status_changed);
 #endif
+
+// ----------------------------------------------------------------------------
+#if IS_ENABLED(ZMK_RGB_UNDERGLOW_STATUS_BATTERY)
+static int rgb_status_battery_event_listener(const zmk_event_t *eh) {
+    struct zmk_led_hsb hsb = state.color;
+    //state.pressed = abs(state.pressed - 1);
+    //hsb.h = abs(state.pressed - 1) * 20;
+    //hsb.b
+    hsb.h = zmk_battery_state_of_charge();
+
+    //pixels[i] = hsb_to_rgb(hsb_scale_zero_max(hsb));
+    state.color = hsb;
+
+}
+
+ZMK_LISTENER(rgb_status_press, rgb_status_battery_event_listener);
+ZMK_SUBSCRIPTION(rgb_status_press, zmk_battery_state_changed);
+#endif // IS_ENABLED(ZMK_RGB_UNDERGLOW_STATUS_BATTERY)
+
+// ----------------------------------------------------------------------------
 
 SYS_INIT(zmk_rgb_underglow_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
