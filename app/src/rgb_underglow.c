@@ -919,28 +919,4 @@ ZMK_SUBSCRIPTION(rgb_underglow, zmk_activity_state_changed);
 ZMK_SUBSCRIPTION(rgb_underglow, zmk_usb_conn_state_changed);
 #endif
 
-#if ZMK_BLE_IS_CENTRAL
-ZMK_SUBSCRIPTION(rgb_underglow, zmk_split_peripheral_status_changed);
-#endif
-
-// ----------------------------------------------------------------------------
-#if IS_ENABLED(ZMK_RGB_UNDERGLOW_STATUS_BATTERY)
-static int rgb_status_battery_event_listener(const zmk_event_t *eh) {
-    struct zmk_led_hsb hsb = state.color;
-    //state.pressed = abs(state.pressed - 1);
-    //hsb.h = abs(state.pressed - 1) * 20;
-    //hsb.b
-    hsb.h = zmk_battery_state_of_charge();
-
-    //pixels[i] = hsb_to_rgb(hsb_scale_zero_max(hsb));
-    state.color = hsb;
-
-}
-
-ZMK_LISTENER(rgb_status_press, rgb_status_battery_event_listener);
-ZMK_SUBSCRIPTION(rgb_status_press, zmk_battery_state_changed);
-#endif // IS_ENABLED(ZMK_RGB_UNDERGLOW_STATUS_BATTERY)
-
-// ----------------------------------------------------------------------------
-
 SYS_INIT(zmk_rgb_underglow_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
